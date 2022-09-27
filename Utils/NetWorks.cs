@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.Text;
+using System.Runtime.Serialization.Formatters.Binary;
 
 namespace Utils {
     public static class NetWorks {
@@ -25,7 +26,6 @@ namespace Utils {
                 }
             }
         }
-
         private static string RunApp(string filename, string arguments, bool recordLog) {
             try {
                 if (recordLog)

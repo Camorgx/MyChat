@@ -2,7 +2,12 @@
 using Utils;
 
 namespace Server {
-    public static class Database {
+    public enum VerifyRes {
+        Passed,
+        UserNotExisted,
+        WrongPassword
+    }
+    internal static class Database {
         private class Item {
             public User User { get; }
             public string Password { get; }
@@ -29,11 +34,6 @@ namespace Server {
             if (newData != null) data = newData;
             return data.Count;
         }
-        public enum VerifyRes {
-            Passed,
-            UserNotExisted,
-            WrongPassword
-        }
         public static VerifyRes Verify(int userId, string password) {
             if (!data.ContainsKey(userId)) 
                 return VerifyRes.UserNotExisted;
@@ -42,10 +42,30 @@ namespace Server {
                 ? VerifyRes.Passed : VerifyRes.WrongPassword;
         }
         public static User Register(string name, string email, string password) {
-            int id = ++currentMaxId;
-            User user = new(name, email, id);
-            data.Add(id, new Item(user, password));
-            return user;
+            lock (data) {
+                int id = ++currentMaxId;
+                User user = new(name, email, id);
+                data.Add(id, new Item(user, password));
+                return user;
+            }
+        }
+        public static User GetUser(int userId) {
+            return data[userId].User;
+        }
+        public static IList<User> GetUsers() {
+            IList<User> res = new List<User>();
+            foreach (var pair in data)
+                res.Add(pair.Value.User);
+            return res;
+        }
+        public static IList<User> SearchForUser(string username) {
+            IList<User> res = new List<User>();
+            foreach (var pair in data) {
+                User user = pair.Value.User;
+                if (user.Name == username)
+                    res.Add(user);
+            }
+            return res;
         }
     }
 }
