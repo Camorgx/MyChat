@@ -16,6 +16,7 @@ namespace Client {
                 else Console.WriteLine("连接服务器失败");
             }
             Console.WriteLine("连接服务器成功");
+            Login();
             HandleInput();
         }
         static string? Input(ConsoleColor color) {
@@ -29,8 +30,8 @@ namespace Client {
             while (true) {
                 string? input = Input(ConsoleColor.Cyan);
                 if (input == "") continue;
-                if (input == "shutdown") {
-                    Client.End();
+                if (input == "logout") {
+                    Client.Logout();
                     break;
                 }
                 else if (input == "register")
@@ -38,34 +39,58 @@ namespace Client {
                 else Console.WriteLine("请检查输入。");
             }
         }
-        static void Register() {
-            string name, email, password;
-            var GetName = () => {
-                Console.Write("昵称: ");
-                string? name = Input(ConsoleColor.Yellow);
-                while (name == "") {
-                    Console.WriteLine("昵称不能为空，请重新输入。");
-                    Console.Write("昵称: ");
-                    name = Input(ConsoleColor.Yellow);
+        static void Login() {
+            VerifyRes res;
+            do {
+                Console.Write("ID: ");
+                string? id = Input(ConsoleColor.Yellow);
+                if (!int.TryParse(id, out int idInt)) {
+                    Console.WriteLine("用户不存在。");
+                    res = VerifyRes.UserNotExisted;
+                    continue;
                 }
-                return name;
-            };
-            var GetEmail = () => {
-                Console.Write("邮箱: ");
-                string? email = Input(ConsoleColor.Yellow);
-                if (email == "") return "null";
-                return email;
-            };
-            var GetPassWord = () => {
                 Console.Write("密码: ");
                 string? password = Input(ConsoleColor.Yellow);
-                while (password == "") {
-                    Console.WriteLine("密码不能为空，请重新输入。");
-                    Console.Write("密码: ");
-                    password = Input(ConsoleColor.Yellow);
+                if (password is null) {
+                    Console.WriteLine("登录失败。");
+                    return;
                 }
-                return password;
-            };
+                res = Client.Login(idInt, password);
+                if (res == VerifyRes.Passed)
+                    Console.WriteLine("登录成功。");
+                else if (res == VerifyRes.UserNotExisted)
+                    Console.WriteLine("用户不存在。");
+                else Console.WriteLine("密码错误。");
+            } while (res != VerifyRes.Passed);
+        }
+        static string GetName() {
+            Console.Write("昵称: ");
+            string? name = Input(ConsoleColor.Yellow);
+            while (name is null || name == "") {
+                Console.WriteLine("昵称不能为空，请重新输入。");
+                Console.Write("昵称: ");
+                name = Input(ConsoleColor.Yellow);
+            }
+            return name;
+        }
+        static string GetEmail() {
+            Console.Write("邮箱: ");
+            string? email = Input(ConsoleColor.Yellow);
+            if (email is null || email == "") return "null";
+            return email;
+        }
+        static string GetPassWord() {
+            Console.Write("密码: ");
+            string? password = Input(ConsoleColor.Yellow);
+            while (password is null || password == "") {
+                Console.WriteLine("密码不能为空，请重新输入。");
+                Console.Write("密码: ");
+                password = Input(ConsoleColor.Yellow);
+            }
+            return password;
+        }
+        static void Register() {
+            string name, email, password;
             name = GetName();
             email = GetEmail();
             password = GetPassWord();

@@ -8,24 +8,62 @@ namespace Server {
     internal static class Server {
         private static readonly Socket server
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        private static readonly Socket messageHandler
+            = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         private static readonly IList<Socket> clients = new List<Socket>();
         private static readonly IDictionary<Socket, User> userBySocket = new Dictionary<Socket, User>();
         private static readonly IDictionary<User, Socket> socketByUser = new Dictionary<User, Socket>();
         private static readonly IDictionary<int, RoomInfo> rooms = new Dictionary<int, RoomInfo>();
+        private static readonly IDictionary<int, IList<Socket>> roomSockets = new Dictionary<int, IList<Socket>>(); 
         private static int maxRoomId = 0;
         public static bool Init() {
-            EndPoint endPoint = new IPEndPoint(IPAddress.Any, 8000);
+            EndPoint serverEnd = new IPEndPoint(IPAddress.Any, 8000);
+            EndPoint messageEnd = new IPEndPoint(IPAddress.Any, 8100);
             try {
-                server.Bind(endPoint);
+                server.Bind(serverEnd);
+                messageHandler.Bind(messageEnd);
             }
             catch (SocketException) {
                 Console.WriteLine("服务端启动失败，同一时刻您只能启动一个服务端。");
                 return false;
             }
             server.Listen(1024);
+            messageHandler.Listen(1024);
             Thread waitForClients = new(GetClient);
+            Thread waitForRooms = new(WaitForRooms);
             waitForClients.Start(server);
+            waitForRooms.Start();
             return true;
+        }
+        private static void WaitForRooms() {
+            while (true) {
+                Socket client = messageHandler.Accept();
+                byte[] buffer = new byte[10240];
+                int byteCnt = client.Receive(buffer);
+                string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                (int roomId, int userId) = JsonSerializer.Deserialize<(int, int)>(jsonString);
+                if (!roomSockets.ContainsKey(roomId))
+                    roomSockets[roomId] = new List<Socket>(roomId);
+                roomSockets[roomId].Add(client);
+                Thread handleMessage = new(HandleMessage);
+                handleMessage.Start((client, roomId, userId));
+            }
+        }
+        private static void HandleMessage(object? argv) {
+            if (argv == null) return;
+            (Socket client, int roomId, int userId) = ((Socket, int, int))argv;
+            byte[] buffer = new byte[10240];
+            while (true) {
+                int byteCnt = client.Receive(buffer);
+                string message = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                foreach (Socket socket in roomSockets[roomId]) {
+                    if (socket != client) {
+                        socket.Send(
+                            JsonSerializer.SerializeToUtf8Bytes(
+                                new Message(userId, message)));
+                    }
+                }
+            }
         }
         private static void GetClient(object? serv) {
             if (serv == null) return;
@@ -97,14 +135,6 @@ namespace Server {
                             socketByUser.Remove(command.From);
                         lock (userBySocket)
                             userBySocket[client] = new User();
-                        break;
-                    case Command.CommandType.SendMessage:
-                        RoomInfo room = rooms[command.RoomId];
-                        foreach (User user in room.Members) {
-                            if (user == From) continue;
-                            var target = socketByUser[user];
-                            target.Send(JsonSerializer.SerializeToUtf8Bytes(command.Message));
-                        }
                         break;
                     case Command.CommandType.CreateRoom:
                         ++maxRoomId;

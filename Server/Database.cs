@@ -2,11 +2,6 @@
 using Utils;
 
 namespace Server {
-    public enum VerifyRes {
-        Passed,
-        UserNotExisted,
-        WrongPassword
-    }
     internal static class Database {
         private class Item {
             public User User { get; }

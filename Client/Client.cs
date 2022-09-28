@@ -36,5 +36,28 @@ namespace Client {
             clientUser = res;
             return res.Id;
         }
+        public static VerifyRes Login(int id, string password) {
+            Command command = new(Command.CommandType.Login,
+                new("", "", id), password);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[10240];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            VerifyRes res = JsonSerializer.Deserialize<VerifyRes>(jsonString);
+            if (res == VerifyRes.Passed) {
+                byteCnt = client.Receive(buffer);
+                jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                User? user = JsonSerializer.Deserialize<User>(jsonString);
+                if (user is null)
+                    throw new ApplicationException("Invalid User object from the server");
+                clientUser = user;
+            }
+            return res;
+        }
+        public static void Logout() {
+            Command command = new(Command.CommandType.Logout, clientUser);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            End();
+        }
     }
 }
