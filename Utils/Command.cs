@@ -11,13 +11,14 @@
             SearchForUser,
             SearchForRoom
         }
-        public CommandType Type { get; }
-        public User From { get; }
-        public User Target { get; } = new();
-        public int RoomId { get; } = 0;
-        public string Message { get; } = "";
-        public string Password { get; } = "";
-        public string Name { get; } = "";
+        public CommandType Type { get; set; }
+        public User From { get; set; } = new();
+        public User Target { get; set; } = new();
+        public int RoomId { get; set; } = 0;
+        public string Message { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Name { get; set; } = "";
+        public Command() { }
         public Command(CommandType type, User from, string passwordOrName) {
             if (type != CommandType.Register && type != CommandType.Login
                 && type != CommandType.CreateRoom && type != CommandType.SearchForUser

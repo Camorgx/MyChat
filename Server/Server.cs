@@ -13,19 +13,35 @@ namespace Server {
         private static readonly IDictionary<User, Socket> socketByUser = new Dictionary<User, Socket>();
         private static readonly IDictionary<int, RoomInfo> rooms = new Dictionary<int, RoomInfo>();
         private static int maxRoomId = 0;
-        public static void Init() {
+        public static bool Init() {
             EndPoint endPoint = new IPEndPoint(IPAddress.Any, 8000);
-            server.Bind(endPoint);
+            try {
+                server.Bind(endPoint);
+            }
+            catch (SocketException) {
+                Console.WriteLine("服务端启动失败，同一时刻您只能启动一个服务端。");
+                return false;
+            }
             server.Listen(1024);
             Thread waitForClients = new(GetClient);
             waitForClients.Start(server);
+            return true;
         }
         private static void GetClient(object? serv) {
             if (serv == null) return;
             Socket server = (Socket)serv;
-            Socket client;
             while (true) {
-                client = server.Accept();
+                Socket client = server.Accept();
+                IPEndPoint? clientIpE = null; 
+                if (client.RemoteEndPoint != null)
+                clientIpE = (IPEndPoint)client.RemoteEndPoint;
+                if (clientIpE != null) {
+                    var color = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("接收到新的客户端连接请求，IP: {0}", 
+                        clientIpE.Address.ToString());
+                    Console.ForegroundColor = color;
+                }
                 clients.Add(client);
                 Thread waitForCommand = new(GetCommand);
                 waitForCommand.Start(client);
@@ -35,10 +51,26 @@ namespace Server {
             if (cli == null) return;
             Socket client = (Socket)cli;
             byte[] buffer = new byte[10240];
+            Command? command = null;
             while (true) {
-                client.Receive(buffer);
-                string str = Encoding.UTF8.GetString(buffer);
-                Command? command = JsonSerializer.Deserialize<Command>(str);
+                try {
+                    int byteCnt = client.Receive(buffer);
+                    string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                    command = JsonSerializer.Deserialize<Command>(jsonString);
+                }
+                catch (Exception) {
+                    IPEndPoint? clientIpE = null;
+                    if (client.RemoteEndPoint != null)
+                        clientIpE = (IPEndPoint)client.RemoteEndPoint;
+                    if (clientIpE != null) {
+                        var color = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("客户端断开连接，IP: {0}",
+                            clientIpE.Address.ToString());
+                        Console.ForegroundColor = color;
+                    }
+                    return;
+                }
                 if (command == null)
                     throw new ArgumentException("Null object received.");
                 User From = command.From;
