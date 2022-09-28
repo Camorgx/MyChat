@@ -2,6 +2,7 @@
 
 namespace Client {
     internal class Program {
+        static bool chatMode = false;
         static void Main(string[] args) {
             Console.WriteLine("MyChat Client v1.0");
             Console.WriteLine("欢迎使用 MyChat!");
@@ -36,8 +37,22 @@ namespace Client {
                 }
                 else if (input == "register")
                     Register();
+                else if (input == "create")
+                    Create();
                 else Console.WriteLine("请检查输入。");
             }
+        }
+        static void Create() {
+            string? name;
+            while (true) {
+                Console.Write("请输入房间名：");
+                name = Input(ConsoleColor.Yellow);
+                if (name is not null && name != "") break;
+                Console.WriteLine("房间名不能为空，请重新输入。");
+            }
+            int roomId = Client.CreateRoom(name);
+            Console.WriteLine($"您的房间号是 {roomId}");
+            chatMode = true;
         }
         static void Login() {
             VerifyRes res;

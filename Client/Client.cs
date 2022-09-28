@@ -9,6 +9,9 @@ namespace Client {
         private static User clientUser = new();
         private static Socket client 
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        private static Socket messageHandler
+            = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        private static string serverIP = "";
         public static bool Init(string ip) {
             try {
                 EndPoint endPoint = new IPEndPoint(IPAddress.Parse(ip), 8000);
@@ -17,6 +20,7 @@ namespace Client {
             catch (Exception) {
                 return false;
             }
+            serverIP = ip;
             return true;
         }
         public static void End() {
@@ -58,6 +62,19 @@ namespace Client {
             Command command = new(Command.CommandType.Logout, clientUser);
             client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
             End();
+        }
+        public static int CreateRoom(string name) {
+            Command command = new(Command.CommandType.CreateRoom,
+                clientUser, name);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[10240];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            int roomId = JsonSerializer.Deserialize<int>(jsonString);
+            EndPoint endPoint = new IPEndPoint(IPAddress.Parse(serverIP), 8100);
+            messageHandler.Connect(endPoint);
+            messageHandler.Send(JsonSerializer.SerializeToUtf8Bytes((roomId, clientUser.Id)));
+            return roomId;
         }
     }
 }
