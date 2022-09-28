@@ -7,25 +7,28 @@ using Utils;
 namespace Client {
     internal static class Client {
         private static User clientUser = new();
-        private static Socket client 
+        private static readonly Socket client 
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        private static Socket messageHandler
+        private static readonly Socket messageHandler
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        private static string serverIP = "";
+        private static int currentRoomId = 0;
         public static bool Init(string ip) {
             try {
                 EndPoint endPoint = new IPEndPoint(IPAddress.Parse(ip), 8000);
+                EndPoint message = new IPEndPoint(IPAddress.Parse(ip), 8100);
                 client.Connect(endPoint);
+                messageHandler.Connect(message);
             }
             catch (Exception) {
                 return false;
             }
-            serverIP = ip;
             return true;
         }
         public static void End() {
             client.Shutdown(SocketShutdown.Both);
             client.Close();
+            messageHandler.Shutdown(SocketShutdown.Both);
+            messageHandler.Close();
         }
         public static int Register(string name, string email, string password) {
             Command command = new(Command.CommandType.Register,
@@ -61,8 +64,12 @@ namespace Client {
         public static void Logout() {
             Command command = new(Command.CommandType.Logout, clientUser);
             client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
-            End();
         }
+        private static bool inRoom = false;
+        /// <summary>
+        /// 只创建房间而不将创建者加入房间
+        /// 随后需要立即调用 JoinRoom
+        /// </summary>
         public static int CreateRoom(string name) {
             Command command = new(Command.CommandType.CreateRoom,
                 clientUser, name);
@@ -70,11 +77,47 @@ namespace Client {
             byte[] buffer = new byte[10240];
             int byteCnt = client.Receive(buffer);
             string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
-            int roomId = JsonSerializer.Deserialize<int>(jsonString);
-            EndPoint endPoint = new IPEndPoint(IPAddress.Parse(serverIP), 8100);
-            messageHandler.Connect(endPoint);
-            messageHandler.Send(JsonSerializer.SerializeToUtf8Bytes((roomId, clientUser.Id)));
-            return roomId;
+            return JsonSerializer.Deserialize<int>(jsonString);
+        }
+        public static bool JoinRoom(int id) {
+            Command command = new(Command.CommandType.JoinRoom, clientUser, id);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[1024];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            bool res = JsonSerializer.Deserialize<bool>(jsonString);
+            if (res) {
+                inRoom = true;
+                currentRoomId = id;
+                Thread messageThread = new(ReceiveMessage);
+                messageThread.Start();
+            }
+            return res;
+        }
+        public static void ReceiveMessage() {
+            byte[] buffer = new byte[10240];
+            while (true) {
+                if (!inRoom) return;
+                try {
+                    int byteCnt = messageHandler.Receive(buffer);
+                    string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                    Message? message = JsonSerializer.Deserialize<Message>(jsonString);
+                    if (message is null) continue;
+                    message.Display();
+                }
+                catch (Exception) {
+                    return;
+                }
+            }
+        }
+        public static void LeaveRoom() {
+            Command command = new(Command.CommandType.LeaveRoom,
+                clientUser, currentRoomId);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            inRoom = false; 
+        }
+        public static void SendMessage(string message) {
+            messageHandler.Send(Encoding.UTF8.GetBytes(message));
         }
     }
 }

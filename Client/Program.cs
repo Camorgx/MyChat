@@ -3,6 +3,7 @@
 namespace Client {
     internal class Program {
         static bool chatMode = false;
+        static bool loggedIn = false;
         static void Main(string[] args) {
             Console.WriteLine("MyChat Client v1.0");
             Console.WriteLine("欢迎使用 MyChat!");
@@ -17,7 +18,6 @@ namespace Client {
                 else Console.WriteLine("连接服务器失败");
             }
             Console.WriteLine("连接服务器成功");
-            Login();
             HandleInput();
         }
         static string? Input(ConsoleColor color) {
@@ -29,54 +29,97 @@ namespace Client {
         }
         static void HandleInput() {
             while (true) {
-                string? input = Input(ConsoleColor.Cyan);
-                if (input == "") continue;
-                if (input == "logout") {
-                    Client.Logout();
-                    break;
+                if (!chatMode) {
+                    string? input = Input(ConsoleColor.Cyan);
+                    if (input == "") continue;
+                    if (input == "logout") {
+                        Client.Logout();
+                        Console.WriteLine("已退出登录。");
+                        loggedIn = false;
+                    }
+                    else if (input == "login")
+                        Login();
+                    else if (input == "register")
+                        Register();
+                    else if (input == "create")
+                        Create();
+                    else if (input == "join")
+                        JoinRoom();
+                    else if (input == "shutdown") {
+                        Client.Logout();
+                        Client.End();
+                        break;
+                    }
+                    else Console.WriteLine("无效指令，请检查输入。");
                 }
-                else if (input == "register")
-                    Register();
-                else if (input == "create")
-                    Create();
-                else Console.WriteLine("请检查输入。");
+                else {
+                    string? message = Input(ConsoleColor.DarkYellow);
+                    if (message is null || message == "") {
+                        Console.WriteLine("消息不能为空。");
+                        continue;
+                    }
+                    if (message.First() == '$') {
+                        if (message == "$leave") {
+                            Client.LeaveRoom();
+                            chatMode = false;
+                        }
+                        else if (message == "$logout") {
+                            Client.LeaveRoom();
+                            Client.Logout();
+                            Client.End();
+                            Console.WriteLine("已退出登录。");
+                            loggedIn = false;
+                            break;
+                        }
+                        else if (message == "$shutdown") {
+                            Client.LeaveRoom();
+                            Client.Logout();
+
+                        }
+                        else Console.WriteLine("无效指令，请检查输入。");
+                    }
+                    else Client.SendMessage(message);
+                }
             }
         }
         static void Create() {
             string? name;
             while (true) {
-                Console.Write("请输入房间名：");
+                Console.Write("房间名：");
                 name = Input(ConsoleColor.Yellow);
                 if (name is not null && name != "") break;
                 Console.WriteLine("房间名不能为空，请重新输入。");
             }
             int roomId = Client.CreateRoom(name);
-            Console.WriteLine($"您的房间号是 {roomId}");
+            Console.WriteLine($"您的房间 ID 是 {roomId}。");
+            Client.JoinRoom(roomId);
             chatMode = true;
         }
         static void Login() {
-            VerifyRes res;
-            do {
-                Console.Write("ID: ");
-                string? id = Input(ConsoleColor.Yellow);
-                if (!int.TryParse(id, out int idInt)) {
-                    Console.WriteLine("用户不存在。");
-                    res = VerifyRes.UserNotExisted;
-                    continue;
-                }
-                Console.Write("密码: ");
-                string? password = Input(ConsoleColor.Yellow);
-                if (password is null) {
-                    Console.WriteLine("登录失败。");
-                    return;
-                }
-                res = Client.Login(idInt, password);
-                if (res == VerifyRes.Passed)
-                    Console.WriteLine("登录成功。");
-                else if (res == VerifyRes.UserNotExisted)
-                    Console.WriteLine("用户不存在。");
-                else Console.WriteLine("密码错误。");
-            } while (res != VerifyRes.Passed);
+            if (loggedIn) {
+                Console.WriteLine("您已经登陆。");
+                return;
+            }
+            Console.Write("ID: ");
+            string? id = Input(ConsoleColor.Yellow);
+            if (!int.TryParse(id, out int idInt)) {
+                Console.WriteLine("用户不存在。");
+                return;
+            }
+            Console.Write("密码: ");
+            string? password = Input(ConsoleColor.Yellow);
+            if (password is null) {
+                Console.WriteLine("登录失败。");
+                return;
+            }
+            VerifyRes res = Client.Login(idInt, password);
+            if (res == VerifyRes.Passed) {
+                Console.WriteLine("登录成功。");
+                loggedIn = true;
+            }
+            else if (res == VerifyRes.UserNotExisted)
+                Console.WriteLine("用户不存在。");
+            else Console.WriteLine("密码错误。");
         }
         static string GetName() {
             Console.Write("昵称: ");
@@ -142,6 +185,20 @@ namespace Client {
             } while (res != 0);
             int id = Client.Register(name, email, password);
             Console.WriteLine($"您的 ID 为 {id}。");
+        }
+        static void JoinRoom() {
+            int id;
+            while (true) {
+                Console.Write($"ID:");
+                string? idString = Input(ConsoleColor.Yellow);
+                if (idString == "") return;
+                if (int.TryParse(idString, out id)) break;
+                Console.WriteLine("房间 ID 的格式不正确，请重新输入。");
+            }
+            if (Client.JoinRoom(id)) {
+                Console.WriteLine("房间加入成功。");
+                chatMode = true;
+            }
         }
     }
 }

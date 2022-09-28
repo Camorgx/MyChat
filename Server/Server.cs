@@ -10,11 +10,9 @@ namespace Server {
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         private static readonly Socket messageHandler
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-        private static readonly IList<Socket> clients = new List<Socket>();
-        private static readonly IDictionary<Socket, User> userBySocket = new Dictionary<Socket, User>();
-        private static readonly IDictionary<User, Socket> socketByUser = new Dictionary<User, Socket>();
+        private static readonly IDictionary<int, (Socket, Socket)> socketsByUser = new Dictionary<int, (Socket, Socket)>();
         private static readonly IDictionary<int, RoomInfo> rooms = new Dictionary<int, RoomInfo>();
-        private static readonly IDictionary<int, IList<Socket>> roomSockets = new Dictionary<int, IList<Socket>>(); 
+        private static readonly IDictionary<int, int> roomByUser = new Dictionary<int, int>();
         private static int maxRoomId = 0;
         public static bool Init() {
             EndPoint serverEnd = new IPEndPoint(IPAddress.Any, 8000);
@@ -30,38 +28,32 @@ namespace Server {
             server.Listen(1024);
             messageHandler.Listen(1024);
             Thread waitForClients = new(GetClient);
-            Thread waitForRooms = new(WaitForRooms);
             waitForClients.Start(server);
-            waitForRooms.Start();
             return true;
-        }
-        private static void WaitForRooms() {
-            while (true) {
-                Socket client = messageHandler.Accept();
-                byte[] buffer = new byte[10240];
-                int byteCnt = client.Receive(buffer);
-                string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
-                (int roomId, int userId) = JsonSerializer.Deserialize<(int, int)>(jsonString);
-                if (!roomSockets.ContainsKey(roomId))
-                    roomSockets[roomId] = new List<Socket>(roomId);
-                roomSockets[roomId].Add(client);
-                Thread handleMessage = new(HandleMessage);
-                handleMessage.Start((client, roomId, userId));
-            }
         }
         private static void HandleMessage(object? argv) {
             if (argv == null) return;
-            (Socket client, int roomId, int userId) = ((Socket, int, int))argv;
+            int userId = (int)argv;
+            string userName = Database.GetUser(userId).Name;
             byte[] buffer = new byte[10240];
+            ISet<int> targetUsers = rooms[roomByUser[userId]].Members;
+            Socket clientMessage = socketsByUser[userId].Item2;
+            string message;
             while (true) {
-                int byteCnt = client.Receive(buffer);
-                string message = Encoding.UTF8.GetString(buffer, 0, byteCnt);
-                foreach (Socket socket in roomSockets[roomId]) {
-                    if (socket != client) {
-                        socket.Send(
-                            JsonSerializer.SerializeToUtf8Bytes(
-                                new Message(userId, message)));
-                    }
+                if (!roomByUser.ContainsKey(userId)) return;
+                try {
+                    int byteCnt = clientMessage.Receive(buffer);
+                    message = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                    if (message == "") continue;
+                }
+                catch (Exception) {
+                    return;
+                }
+                foreach (int targetId in targetUsers) {
+                    if (targetId == userId) continue;
+                    Socket targetSocket = socketsByUser[targetId].Item2;
+                    targetSocket.Send(JsonSerializer.SerializeToUtf8Bytes(
+                                new Message(userName, message)));
                 }
             }
         }
@@ -70,6 +62,7 @@ namespace Server {
             Socket server = (Socket)serv;
             while (true) {
                 Socket client = server.Accept();
+                Socket clientMessage = messageHandler.Accept();
                 IPEndPoint? clientIpE = null; 
                 if (client.RemoteEndPoint != null)
                 clientIpE = (IPEndPoint)client.RemoteEndPoint;
@@ -80,17 +73,16 @@ namespace Server {
                         clientIpE.Address.ToString());
                     Console.ForegroundColor = color;
                 }
-                clients.Add(client);
                 Thread waitForCommand = new(GetCommand);
-                waitForCommand.Start(client);
+                waitForCommand.Start((client, clientMessage));
             }
         }
-        private static void GetCommand(object? cli) {
-            if (cli == null) return;
-            Socket client = (Socket)cli;
+        private static void GetCommand(object? argv) {
+            if (argv == null) return;
+            (Socket client, Socket clientMessage) = ((Socket, Socket))argv;
             byte[] buffer = new byte[10240];
-            Command? command = null;
             while (true) {
+                Command? command;
                 try {
                     int byteCnt = client.Receive(buffer);
                     string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
@@ -114,7 +106,7 @@ namespace Server {
                 User From = command.From;
                 switch (command.Type) {
                     case Command.CommandType.Register:
-                        User resUser 
+                        User resUser
                             = Database.Register(From.Name, From.Email, command.Password);
                         client.Send(JsonSerializer.SerializeToUtf8Bytes(resUser));
                         break;
@@ -123,36 +115,38 @@ namespace Server {
                         client.Send(JsonSerializer.SerializeToUtf8Bytes(verifyRes));
                         if (verifyRes == VerifyRes.Passed) {
                             User target = Database.GetUser(From.Id);
-                            lock (userBySocket)
-                                userBySocket[client] = target;
-                            lock (socketByUser)
-                                socketByUser[target] = client;
+                            lock (socketsByUser)
+                                socketsByUser[From.Id] = (client, clientMessage);
                             client.Send(JsonSerializer.SerializeToUtf8Bytes(target));
                         }
                         break;
                     case Command.CommandType.Logout:
-                        lock (socketByUser)
-                            socketByUser.Remove(command.From);
-                        lock (userBySocket)
-                            userBySocket[client] = new User();
+                        lock (socketsByUser)
+                            socketsByUser.Remove(command.From.Id);
                         break;
                     case Command.CommandType.CreateRoom:
+                        // 只创建房间，而不向房间内添加任何成员
+                        // 随后 Client 应当再次发出加入房间的请求
                         ++maxRoomId;
-                        rooms.Add(maxRoomId, new RoomInfo(command.Name, maxRoomId, From));
+                        rooms.Add(maxRoomId, new RoomInfo(command.Name, maxRoomId));
                         client.Send(JsonSerializer.SerializeToUtf8Bytes(maxRoomId));
                         break;
                     case Command.CommandType.JoinRoom:
                         if (!rooms.ContainsKey(command.RoomId))
                             client.Send(JsonSerializer.SerializeToUtf8Bytes(false));
                         else {
-                            rooms[command.RoomId].Members.Add(From);
+                            rooms[command.RoomId].Members.Add(From.Id);
+                            roomByUser[From.Id] = command.RoomId;
+                            Thread thread = new(HandleMessage);
+                            thread.Start(From.Id);
                             client.Send(JsonSerializer.SerializeToUtf8Bytes(true));
                         }
                         break;
                     case Command.CommandType.LeaveRoom:
-                        var members = rooms[command.RoomId].Members;
-                        members.Remove(From);
-                        if (members.Count == 0)
+                        var roomMembers = rooms[command.RoomId].Members;
+                        roomMembers.Remove(From.Id);
+                        roomByUser.Remove(From.Id);
+                        if (roomMembers.Count == 0)
                             rooms.Remove(command.RoomId);
                         break;
                     case Command.CommandType.SearchForUser:
@@ -176,10 +170,10 @@ namespace Server {
                 Console.WriteLine(pair.Value.ToString());
         }
         public static void DisplayUsers() {
-            var users = socketByUser.Keys;
+            var users = socketsByUser.Keys;
             Console.WriteLine($"当前在线用户数目: {users.Count}");
-            foreach(var user in users)
-                Console.WriteLine(user.ToString());
+            foreach(int userId in users)
+                Console.WriteLine(Database.GetUser(userId).ToString());
         }
     }
 }
