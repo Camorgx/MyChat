@@ -39,7 +39,9 @@ namespace Client {
                         loggedIn = false;
                     }
                     else if (inputs[0] == "search") {
-                        if (inputs[1] == "user")
+                        if (inputs.Length != 2)
+                            Console.WriteLine("无效指令，请检查输入。");
+                        else if (inputs[1] == "user")
                             SearchUser();
                         else if (inputs[1] == "room")
                             SearchRoom();
