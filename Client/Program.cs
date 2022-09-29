@@ -31,11 +31,19 @@ namespace Client {
             while (true) {
                 if (!chatMode) {
                     string? input = Input(ConsoleColor.Cyan);
-                    if (input == "") continue;
+                    if (input is null || input == "") continue;
+                    string[] inputs = input.Split();
                     if (input == "logout") {
                         Client.Logout();
                         Console.WriteLine("已退出登录。");
                         loggedIn = false;
+                    }
+                    else if (inputs[0] == "search") {
+                        if (inputs[1] == "user")
+                            SearchUser();
+                        else if (inputs[1] == "room")
+                            SearchRoom();
+                        else Console.WriteLine("无效指令，请检查输入。");
                     }
                     else if (input == "login")
                         Login();
@@ -63,26 +71,47 @@ namespace Client {
                             Client.LeaveRoom();
                             chatMode = false;
                         }
-                        else if (message == "$logout") {
-                            Client.LeaveRoom();
-                            Client.Logout();
-                            Client.End();
-                            Console.WriteLine("已退出登录。");
-                            loggedIn = false;
-                            break;
-                        }
-                        else if (message == "$shutdown") {
-                            Client.LeaveRoom();
-                            Client.Logout();
-
-                        }
+                        else if (message == "$info")
+                            GetRoomInfo();
                         else Console.WriteLine("无效指令，请检查输入。");
                     }
                     else Client.SendMessage(message);
                 }
             }
         }
+        static void SearchUser() {
+            var (res, users) = Client.SearchUser(GetName());
+            if (!res) {
+                Console.WriteLine("未找到相关用户。");
+                return;
+            }
+            else {
+                Console.WriteLine($"找到用户数目: {users.Count}");
+                foreach (User user in users)
+                    Console.WriteLine(user.ToString());
+            }
+        }
+        static void SearchRoom() {
+            var (res, rooms) = Client.SearchRoom(GetName());
+            if (!res) {
+                Console.WriteLine("未找到相关房间。");
+                return;
+            }
+            else {
+                Console.WriteLine($"找到房间数目: {rooms.Count}");
+                foreach (RoomRes room in rooms)
+                    Console.WriteLine(room.ToString());
+            }
+        }
+        static void GetRoomInfo() {
+            RoomRes res = Client.GetRoomInfo();
+            Console.WriteLine(res.ToString());
+        }
         static void Create() {
+            if (!loggedIn) {
+                Console.WriteLine("您需要先登录");
+                return;
+            }
             string? name;
             while (true) {
                 Console.Write("房间名：");
@@ -187,6 +216,10 @@ namespace Client {
             Console.WriteLine($"您的 ID 为 {id}。");
         }
         static void JoinRoom() {
+            if (!loggedIn) {
+                Console.WriteLine("您需要先登录。");
+                return;
+            }
             int id;
             while (true) {
                 Console.Write($"ID:");
@@ -198,6 +231,7 @@ namespace Client {
             if (Client.JoinRoom(id)) {
                 Console.WriteLine("房间加入成功。");
                 chatMode = true;
+                GetRoomInfo();
             }
         }
     }

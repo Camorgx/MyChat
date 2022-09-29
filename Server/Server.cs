@@ -22,7 +22,7 @@ namespace Server {
                 messageHandler.Bind(messageEnd);
             }
             catch (SocketException) {
-                Console.WriteLine("服务端启动失败，同一时刻您只能启动一个服务端。");
+                Log("服务端启动失败，同一时刻您只能启动一个服务端。");
                 return false;
             }
             server.Listen(1024);
@@ -30,6 +30,12 @@ namespace Server {
             Thread waitForClients = new(GetClient);
             waitForClients.Start(server);
             return true;
+        }
+        private static void Log(string message) {
+            var color = Console.ForegroundColor;
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(message);
+            Console.ForegroundColor = color;
         }
         private static void HandleMessage(object? argv) {
             if (argv == null) return;
@@ -69,12 +75,20 @@ namespace Server {
                 if (clientIpE != null) {
                     var color = Console.ForegroundColor;
                     Console.ForegroundColor = ConsoleColor.Green;
-                    Console.WriteLine("接收到新的客户端连接请求，IP: {0}", 
-                        clientIpE.Address.ToString());
+                    Log($"接收到新的客户端连接请求，IP: {clientIpE.Address}");
                     Console.ForegroundColor = color;
                 }
                 Thread waitForCommand = new(GetCommand);
                 waitForCommand.Start((client, clientMessage));
+            }
+        }
+        private static void NotifyInRoom(int roomId, int userId) {
+            Message message = new(Database.GetUser(userId).Name, "$Join");
+            ISet<int> targetUsers = rooms[roomId].Members;
+            foreach (int targetId in targetUsers) {
+                if (targetId == userId) continue;
+                Socket targetSocket = socketsByUser[targetId].Item2;
+                targetSocket.Send(JsonSerializer.SerializeToUtf8Bytes(message));
             }
         }
         private static void GetCommand(object? argv) {
@@ -95,8 +109,7 @@ namespace Server {
                     if (clientIpE != null) {
                         var color = Console.ForegroundColor;
                         Console.ForegroundColor = ConsoleColor.Green;
-                        Console.WriteLine("客户端断开连接，IP: {0}",
-                            clientIpE.Address.ToString());
+                        Log($"客户端断开连接，IP: {clientIpE.Address}");
                         Console.ForegroundColor = color;
                     }
                     return;
@@ -109,6 +122,7 @@ namespace Server {
                         User resUser
                             = Database.Register(From.Name, From.Email, command.Password);
                         client.Send(JsonSerializer.SerializeToUtf8Bytes(resUser));
+                        Log($"新用户注册：{resUser}。");
                         break;
                     case Command.CommandType.Login:
                         VerifyRes verifyRes = Database.Verify(From.Id, command.Password);
@@ -118,11 +132,13 @@ namespace Server {
                             lock (socketsByUser)
                                 socketsByUser[From.Id] = (client, clientMessage);
                             client.Send(JsonSerializer.SerializeToUtf8Bytes(target));
+                            Log($"用户 {From.Id} 已登录。");
                         }
                         break;
                     case Command.CommandType.Logout:
                         lock (socketsByUser)
                             socketsByUser.Remove(command.From.Id);
+                        Log($"用户 {From.Id} 下线。");
                         break;
                     case Command.CommandType.CreateRoom:
                         // 只创建房间，而不向房间内添加任何成员
@@ -130,6 +146,7 @@ namespace Server {
                         ++maxRoomId;
                         rooms.Add(maxRoomId, new RoomInfo(command.Name, maxRoomId));
                         client.Send(JsonSerializer.SerializeToUtf8Bytes(maxRoomId));
+                        Log($"用户 {From.Id} 创建了房间 {maxRoomId}。");
                         break;
                     case Command.CommandType.JoinRoom:
                         if (!rooms.ContainsKey(command.RoomId))
@@ -140,30 +157,62 @@ namespace Server {
                             Thread thread = new(HandleMessage);
                             thread.Start(From.Id);
                             client.Send(JsonSerializer.SerializeToUtf8Bytes(true));
+                            NotifyInRoom(command.RoomId, From.Id);
+                            Log($"用户 {From.Id} 加入了房间 {command.RoomId}。");
                         }
                         break;
                     case Command.CommandType.LeaveRoom:
                         var roomMembers = rooms[command.RoomId].Members;
                         roomMembers.Remove(From.Id);
                         roomByUser.Remove(From.Id);
-                        if (roomMembers.Count == 0)
+                        Log($"用户 {From.Id} 离开了房间 {command.RoomId}。");
+                        if (roomMembers.Count == 0) {
                             rooms.Remove(command.RoomId);
+                            Log($"房间 {command.RoomId} 已被销毁。");
+                        }
                         break;
                     case Command.CommandType.SearchForUser:
                         var users = Database.SearchForUser(command.Name);
-                        client.Send(JsonSerializer.SerializeToUtf8Bytes(users));
+                        if (users.Count == 0)
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(false));
+                        else {
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(true));
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(users));
+                        }
                         break;
                     case Command.CommandType.SearchForRoom:
-                        IList<RoomInfo> res = new List<RoomInfo>();
+                        IList<RoomRes> res = new List<RoomRes>();
                         foreach (var pair in rooms)
                             if (pair.Value.Name == command.Name)
-                                res.Add(pair.Value);
-                        client.Send(JsonSerializer.SerializeToUtf8Bytes(res));
+                                res.Add(GetRoomRes(pair.Value.Id));
+                        if (res.Count == 0)
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(false));
+                        else {
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(true));
+                            client.Send(JsonSerializer.SerializeToUtf8Bytes(res));
+                        }
+                        break;
+                    case Command.CommandType.GetRoomInfo:
+                        RoomRes roomRes = GetRoomRes(command.RoomId);
+                        client.Send(JsonSerializer.SerializeToUtf8Bytes(roomRes));
                         break;
                     default: break;
                 }
             }
         } 
+        public static RoomRes GetRoomRes(int roomId) {
+            RoomInfo info = rooms[roomId];
+            RoomRes roomRes = new() {
+                Count = info.Members.Count,
+                Name = info.Name,
+                Id = info.Id
+            };
+            foreach (int userId in info.Members) {
+                User user = Database.GetUser(userId);
+                roomRes.Users.Add(user);
+            }
+            return roomRes;
+        }
         public static void DisplayRooms() {
             Console.WriteLine($"现有聊天室数目：{rooms.Count}");
             foreach (var pair in rooms)

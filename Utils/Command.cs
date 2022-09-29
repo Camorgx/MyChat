@@ -13,7 +13,8 @@
             JoinRoom,
             LeaveRoom,
             SearchForUser,
-            SearchForRoom
+            SearchForRoom,
+            GetRoomInfo
         }
         public CommandType Type { get; set; }
         public User From { get; set; } = new();
@@ -41,7 +42,8 @@
             From = from;
         }
         public Command(CommandType type, User from, int roomId) {
-            if (type != CommandType.JoinRoom && type != CommandType.LeaveRoom)
+            if (type != CommandType.JoinRoom && type != CommandType.LeaveRoom
+                && type != CommandType.GetRoomInfo)
                 throw new ArgumentException("Invalid CommandType.");
             Type = type;
             From = from;

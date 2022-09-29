@@ -103,7 +103,13 @@ namespace Client {
                     string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
                     Message? message = JsonSerializer.Deserialize<Message>(jsonString);
                     if (message is null) continue;
-                    message.Display();
+                    if (message.Words == "$Join") {
+                        var color = Console.ForegroundColor;
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine($"{message.UserName} 加入了房间。");
+                        Console.ForegroundColor = color;
+                    }
+                    else message.Display();
                 }
                 catch (Exception) {
                     return;
@@ -118,6 +124,56 @@ namespace Client {
         }
         public static void SendMessage(string message) {
             messageHandler.Send(Encoding.UTF8.GetBytes(message));
+        }
+        public static RoomRes GetRoomInfo() {
+            Command command = new(Command.CommandType.GetRoomInfo,
+                clientUser, currentRoomId);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[10240];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            RoomRes? res = JsonSerializer.Deserialize<RoomRes>(jsonString);
+            if (res is null) 
+                throw new ApplicationException("Invalid RoomRes object from the server");
+            return res;
+        }
+        public static (bool, IList<User>) SearchUser(string name) {
+            Command command = new(Command.CommandType.SearchForUser,
+                clientUser, name);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[10240];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            bool res = JsonSerializer.Deserialize<bool>(jsonString);
+            IList<User>? users;
+            if (res) {
+                byteCnt = client.Receive(buffer);
+                jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                users = JsonSerializer.Deserialize<IList<User>>(jsonString);
+                if (users is null)
+                    throw new ApplicationException("Invalid object from the server");
+                return (res, users);
+            }
+            else return (res, new List<User>());
+        }
+        public static (bool, IList<RoomRes>) SearchRoom(string name) {
+            Command command = new(Command.CommandType.SearchForRoom,
+                clientUser, name);
+            client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
+            byte[] buffer = new byte[10240];
+            int byteCnt = client.Receive(buffer);
+            string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+            bool res = JsonSerializer.Deserialize<bool>(jsonString);
+            IList<RoomRes>? rooms;
+            if (res) {
+                byteCnt = client.Receive(buffer);
+                jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
+                rooms = JsonSerializer.Deserialize<IList<RoomRes>>(jsonString);
+                if (rooms is null)
+                    throw new ApplicationException("Invalid object from the server");
+                return (res, rooms);
+            }
+            else return (res, new List<RoomRes>());
         }
     }
 }
