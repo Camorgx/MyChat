@@ -2,7 +2,7 @@
     public class RoomInfo {
         public string Name { get; set; } = "";
         public int Id { get; set; } = 0;
-        public ISet<int> Members { get; set; } = new HashSet<int>(); 
+        public ISet<int> Members { get; set; } = new HashSet<int>();
         public override string ToString() {
             string head = $"ID: {Id}, Count: {Members.Count}\n";
             string users = "";

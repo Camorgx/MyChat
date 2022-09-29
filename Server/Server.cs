@@ -69,9 +69,9 @@ namespace Server {
             while (true) {
                 Socket client = server.Accept();
                 Socket clientMessage = messageHandler.Accept();
-                IPEndPoint? clientIpE = null; 
+                IPEndPoint? clientIpE = null;
                 if (client.RemoteEndPoint != null)
-                clientIpE = (IPEndPoint)client.RemoteEndPoint;
+                    clientIpE = (IPEndPoint)client.RemoteEndPoint;
                 if (clientIpE != null) {
                     var color = Console.ForegroundColor;
                     Console.ForegroundColor = ConsoleColor.Green;
@@ -199,7 +199,7 @@ namespace Server {
                     default: break;
                 }
             }
-        } 
+        }
         public static RoomRes GetRoomRes(int roomId) {
             RoomInfo info = rooms[roomId];
             RoomRes roomRes = new() {
@@ -221,7 +221,7 @@ namespace Server {
         public static void DisplayUsers() {
             var users = socketsByUser.Keys;
             Console.WriteLine($"当前在线用户数目: {users.Count}");
-            foreach(int userId in users)
+            foreach (int userId in users)
                 Console.WriteLine(Database.GetUser(userId).ToString());
         }
     }

@@ -9,7 +9,7 @@ namespace Server {
             Console.WriteLine($"读取了 {Database.Load()} 个用户。");
             bool state = Server.Init();
             if (!state) return;
-            Console.WriteLine("服务端已启动，IP：" 
+            Console.WriteLine("服务端已启动，IP："
                 + NetWorks.GetLocalIP());
             HandleInput();
             Database.Store();

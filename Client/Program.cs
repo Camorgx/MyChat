@@ -9,7 +9,7 @@ namespace Client {
             Console.WriteLine("欢迎使用 MyChat!");
             Console.WriteLine($"当前 IP: {NetWorks.GetLocalIP()}");
             string? ip;
-            while(true) {
+            while (true) {
                 Console.Write("连接至服务器：");
                 ip = Console.ReadLine();
                 while (ip == null) ip = Console.ReadLine();

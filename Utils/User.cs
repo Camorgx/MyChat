@@ -12,10 +12,10 @@
         public override string ToString() {
             return $"ID: {Id}, Name: {Name}, Email: {Email}";
         }
-        public static bool operator==(User a, User b) {
+        public static bool operator ==(User a, User b) {
             return a.Id == b.Id;
         }
-        public static bool operator!=(User a, User b) {
+        public static bool operator !=(User a, User b) {
             return a.Id != b.Id;
         }
         public override bool Equals(object? obj) {

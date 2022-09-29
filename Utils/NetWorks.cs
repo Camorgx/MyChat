@@ -1,9 +1,8 @@
 ﻿using System.Diagnostics;
-using System.Net.Sockets;
 using System.Net;
-using System.Text.RegularExpressions;
+using System.Net.Sockets;
 using System.Text;
-using System.Runtime.Serialization.Formatters.Binary;
+using System.Text.RegularExpressions;
 
 namespace Utils {
     public static class NetWorks {
@@ -16,7 +15,7 @@ namespace Utils {
                 try {
                     TcpClient c = new();
                     c.Connect("www.baidu.com", 80);
-                    string ip = c.Client.LocalEndPoint is not IPEndPoint 
+                    string ip = c.Client.LocalEndPoint is not IPEndPoint
                         endPoint ? "" : endPoint.Address.ToString();
                     c.Close();
                     return ip;
@@ -38,7 +37,7 @@ namespace Utils {
                 proc.StartInfo.UseShellExecute = false;
                 proc.Start();
 
-                using StreamReader sr = new (proc.StandardOutput.BaseStream, Encoding.Default);
+                using StreamReader sr = new(proc.StandardOutput.BaseStream, Encoding.Default);
                 Thread.Sleep(100);
                 if (!proc.HasExited) proc.Kill();
                 string txt = sr.ReadToEnd();

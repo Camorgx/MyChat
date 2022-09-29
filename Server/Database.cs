@@ -21,7 +21,7 @@ namespace Server {
             File.WriteAllText(jsonFileName, jsonString);
         }
         public static int Load() {
-            if (!File.Exists(jsonFileName) || !File.Exists(maxIdFileName)) 
+            if (!File.Exists(jsonFileName) || !File.Exists(maxIdFileName))
                 return 0;
             currentMaxId = int.Parse(File.ReadAllText(maxIdFileName));
             string jsonString = File.ReadAllText(jsonFileName);
@@ -30,10 +30,10 @@ namespace Server {
             return data.Count;
         }
         public static VerifyRes Verify(int userId, string password) {
-            if (!data.ContainsKey(userId)) 
+            if (!data.ContainsKey(userId))
                 return VerifyRes.UserNotExisted;
             Item item = data[userId];
-            return (password == item.Password) 
+            return (password == item.Password)
                 ? VerifyRes.Passed : VerifyRes.WrongPassword;
         }
         public static User Register(string name, string email, string password) {

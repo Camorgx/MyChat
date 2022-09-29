@@ -7,7 +7,7 @@ using Utils;
 namespace Client {
     internal static class Client {
         private static User clientUser = new();
-        private static readonly Socket client 
+        private static readonly Socket client
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         private static readonly Socket messageHandler
             = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -120,7 +120,7 @@ namespace Client {
             Command command = new(Command.CommandType.LeaveRoom,
                 clientUser, currentRoomId);
             client.Send(JsonSerializer.SerializeToUtf8Bytes(command));
-            inRoom = false; 
+            inRoom = false;
         }
         public static void SendMessage(string message) {
             messageHandler.Send(Encoding.UTF8.GetBytes(message));
@@ -133,7 +133,7 @@ namespace Client {
             int byteCnt = client.Receive(buffer);
             string jsonString = Encoding.UTF8.GetString(buffer, 0, byteCnt);
             RoomRes? res = JsonSerializer.Deserialize<RoomRes>(jsonString);
-            if (res is null) 
+            if (res is null)
                 throw new ApplicationException("Invalid RoomRes object from the server");
             return res;
         }
